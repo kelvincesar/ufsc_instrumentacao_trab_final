@@ -25,8 +25,8 @@
 // Application defines
 
 #define UART_PORT UART_NUM_0
-#define UART_BUFF_SIZE (1024)
-#define UART_MEASURES_SIZE (10)
+#define UART_BUFF_SIZE (2048)
+#define UART_MEASURES_SIZE (85)
 
 #define TEST_SIN_WAVE_SIZE (255)
 #define GPIO_LED    GPIO_NUM_16

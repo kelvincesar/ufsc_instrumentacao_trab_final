@@ -8,7 +8,7 @@ void setup_usb_uart(){
     /* Configure parameters of an UART driver,
      * communication pins and install the driver */
     uart_config_t uart_config = {
-        .baud_rate = 115200,
+        .baud_rate = 460800,
         .data_bits = UART_DATA_8_BITS,
         .parity = UART_PARITY_DISABLE,
         .stop_bits = UART_STOP_BITS_1,
@@ -37,7 +37,7 @@ static void uart_send_data(void *pvParameters)
     // headers
     
     uint16_t measure = 0;
-    uint8_t index = 0;
+    uint16_t index = 0;
     uint8_t flag_send = 0;
     uint8_t array_size = 0;
     for(;;) {
@@ -53,8 +53,7 @@ static void uart_send_data(void *pvParameters)
                 //printf("Reading uart \n");
                 data_len = uart_read_bytes(UART_PORT, data, event.size, portMAX_DELAY);
                 if(data_len > 0){
-                    //printf("Received data \n");
-                    //printf("received: %s", (const char*) data);
+
                     for (index = 0; index < UART_MEASURES_SIZE*3; index+=3){
                         handler_cb = cb_pop(&cb, &measure);
                         //printf("Buffer read \n");
@@ -68,6 +67,11 @@ static void uart_send_data(void *pvParameters)
                             array_size += 3;
                         } else break;                        
                     }
+                    //printf("\nArray size: %d\n Values:", array_size);
+                    //for (index = 0; index < array_size; index++){
+                    //    printf(" ,%d", sent_array[index]);                   
+                    //}      
+                    //printf("\n");
                     if(flag_send) uart_write_bytes(UART_PORT, (const char*)sent_array, array_size);
                     
                 }
@@ -100,16 +104,18 @@ void feed_buffer(){
     while (true){
 
         // To not hog the CPU
-        if( (esp_timer_get_time() - start_time >= 60) || start_time == 0){   // Check delta in uS
+        if( (esp_timer_get_time() - start_time >= 167) || start_time == 0){   // Check delta in uS
             handler_cb = cb_push(&cb, &table_sin_wave[i]);
+
             if(handler_cb > 0) gpio_set_level(GPIO_LED, 1);
             else gpio_set_level(GPIO_LED, 0);
+
             i++;
             if (i >= TEST_SIN_WAVE_SIZE) i = 0;
 
             start_time = esp_timer_get_time();
         }
-        // Feed watchdog
+        // Feed the watchdog
         TIMERG0.wdt_wprotect=TIMG_WDT_WKEY_VALUE;
         TIMERG0.wdt_feed=1;
         TIMERG0.wdt_wprotect=0;
