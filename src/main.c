@@ -1,12 +1,31 @@
-// Include used libraries
-#include "main.h"					// Smartmeter header
+/* ********************************************************************************
+ * UNIVERSIDADE FEDERAL DE SANTA CATARINA - JOINVILLE
+ * ESE410009-41010086ME (20203) - Instrumentação para Sistemas Eletrônicos
+ * 
+ * Aluno: Kelvin César de Andrade
+ * Data: 04/2021
+ * Descrição: 
+ * 
+ * - Trabalho final para amostrar um sinal e transmitir para o software LabVIEW 
+ * via UART;
+ * 
+ * - Neste projeto é realizado a amostragem de um sinal do sensor de tensão AC 
+ * ZMPT101B via I2S e armazenado em um buffer circular. Uma outra task é criada
+ *  no núcleo 1 para realizar a transmissão via UART das amostras coletadas.
+ * 
+ * - Core 0: Amostragem do sinal via I2S.
+ * - Core 1: Transmissão dos dados via UART.
+ *********************************************************************************
+ */
+
+// Include header with libraries and defines
+#include "main.h"
 
 
 
 
 void setup_usb_uart(){
-    /* Configure parameters of an UART driver,
-     * communication pins and install the driver */
+    // Configure parameters of an UART driver
     uart_config_t uart_config = {
         .baud_rate = 460800,
         .data_bits = UART_DATA_8_BITS,
@@ -16,10 +35,10 @@ void setup_usb_uart(){
         .source_clk = UART_SCLK_APB,
     };
 
-    //Install UART driver, and get the queue.
+    //Install UART driver
     uart_driver_install(UART_PORT, UART_BUFF_SIZE * 2, UART_BUFF_SIZE * 2, 20, &uart0_queue, 0);
     uart_param_config(UART_PORT, &uart_config);
-    //Set UART pins (using UART0 default pins ie no changes.)
+    //Set UART pins to UART 0
     uart_set_pin(UART_PORT, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
 
 }
@@ -32,99 +51,152 @@ static void uart_send_data(void *pvParameters)
     int handler_cb;
     
     // Configure a temporary buffer for the incoming data
-    uint8_t *data = (uint8_t *) malloc(sizeof(uint8_t)*UART_BUFF_SIZE);   // Alocação de dados 
-    char *sent_array = (char *) malloc(sizeof(char)*UART_MEASURES_SIZE*3);   // vetor para envio de dados 
+    uint8_t *data = (uint8_t *) malloc(sizeof(uint8_t)*UART_BUFF_SIZE);     // Alocação de dados 
+    char *sent_array = (char *) malloc(sizeof(char)*UART_MEASURES_SIZE*3);  // Vetor para envio de dados 
     // headers
     
     uint16_t measure = 0;
-    uint16_t index = 0;
     uint8_t flag_send = 0;
     uint8_t array_size = 0;
+
+    // Loop forever waiting for UART requests
     for(;;) {
+
         //Waiting for UART event.
         if(xQueueReceive(uart0_queue, (void * )&event, (portTickType)portMAX_DELAY)) {
+            // Clean uart buffer
             bzero(data, UART_BUFF_SIZE);
-            flag_send = 0;
-            array_size = 0;
 
-            // Received data on UART
+            // Checks uart event (data received)
             if(event.type == UART_DATA) {
-                // Read data from the UART
-                //printf("Reading uart \n");
+                flag_send = 0;
+                array_size = 0;
+                measure  = 0;
+
+                // Read data from UART
                 data_len = uart_read_bytes(UART_PORT, data, event.size, portMAX_DELAY);
                 if(data_len > 0){
-
-                    for (index = 0; index < UART_MEASURES_SIZE*3; index+=3){
+                    // Loop on to colect UART_MEASURES_SIZE to send to LabVIEW
+                    while(array_size < UART_MEASURES_SIZE*3){
+                        // Read circular buffer
                         handler_cb = cb_pop(&cb, &measure);
-                        //printf("Buffer read \n");
+                        // If success...
                         if(handler_cb == 0){ 
-                            //printf("data: %d\n",  measure);
-                            // Write data back to the UART
-                            sent_array[index] = 0;    // measure header
-                            sent_array[index+1] = measure >> 8;
-                            sent_array[index+2] = measure & 0xFF;
+ 
+                            // Write data on UART array
+                            sent_array[array_size] = 0;                 // measure header
+                            sent_array[array_size+1] = measure >> 8;    // measure high byte
+                            sent_array[array_size+2] = measure & 0xFF;  // measure low byte
                             flag_send = 1;
                             array_size += 3;
-                        } else break;                        
+                        } else {
+                            vTaskDelay(pdMS_TO_TICKS(1)); // Delay 1ms waiting for more measures 
+                        };                        
                     }
-                    //printf("\nArray size: %d\n Values:", array_size);
-                    //for (index = 0; index < array_size; index++){
-                    //    printf(" ,%d", sent_array[index]);                   
-                    //}      
-                    //printf("\n");
+
+                    // Send data on UART
                     if(flag_send) uart_write_bytes(UART_PORT, (const char*)sent_array, array_size);
                     
                 }
             }
         }
     }
+    // Clean buffers
     cb_clean(&cb);
     free(data);
     data = NULL;
+
+    // Kill task
     vTaskDelete(NULL);
 }
-void feed_buffer(){
-    static uint16_t table_sin_wave[TEST_SIN_WAVE_SIZE] = {
-    // Sin wave
-        128,131,134,137,141,144,147,150,153,156,159,162,165,168,171,174,
-        177,180,183,186,188,191,194,196,199,202,204,207,209,212,214,216,218,221,223,225,227,229,231,233,234,236,
-        238,239,241,242,243,245,246,247,248,249,250,251,252,253,253,254,254,255,255,255,255,255,255,
-        255,255,255,255,254,254,253,253,252,251,251,250,249,248,247,245,244,243,241,240,238,
-        237,235,233,232,230,228,226,224,222,220,217,215,213,210,208,205,203,200,198,195,192,190,187,184,181,178,176,
-        173,170,167,164,161,158,155,151,148,145,142,139,136,133,130,126,123,120,117,114,111,108,105,101,
-        98,95,92,89,86,83,80,78,75,72,69,66,64,61,58,56,53,51,48,46,43,41,39,36,34,32,30,28,26,24,23,21,
-        19,18,16,15,13,12,11,9,8,7,6,5,5,4,3,3,2,2,1,1,1,1,1,1,1,1,1,1,2,2,3,3,4,5,6,7,8,9,10,
-        11,13,14,15,17,18,20,22,23,25,27,29,31,33,35,38,40,42,44,47,49,52,54,
-        57,60,62,65,68,70,73,76,79,82,85,88,91,94,97,100,103,106,109,112,115,119,122,125
+
+// Inicialização do I2S
+static void adc_i2s_init(void)
+{
+    
+    static const i2s_config_t i2s_config = {
+        .mode = I2S_MODE_MASTER | I2S_MODE_RX | I2S_MODE_ADC_BUILT_IN,
+        .sample_rate = ADC_SAMPLE_RATE,
+        .bits_per_sample = I2S_BITS_PER_SAMPLE_16BIT,
+        .communication_format = I2S_COMM_FORMAT_STAND_I2S,
+        .channel_format = I2S_CHANNEL_FMT_ONLY_LEFT,
+        .intr_alloc_flags = ESP_INTR_FLAG_LEVEL1,
+        .dma_buf_count = ADC_DMA_COUNT,
+        .dma_buf_len = ADC_BUFFER_SIZE,
+        .use_apll = false,
     };
+    //install and start i2s driver
+    i2s_driver_install(ADC_I2S_NUM, &i2s_config, 0, NULL);
 
-    uint16_t i = 0;
-    int handler_cb;
-    int64_t start_time = 0;
-    while (true){
+    // Some delay.
+    vTaskDelay(5000/portTICK_RATE_MS);
 
-        // To not hog the CPU
-        if( (esp_timer_get_time() - start_time >= 167) || start_time == 0){   // Check delta in uS
-            handler_cb = cb_push(&cb, &table_sin_wave[i]);
-
-            if(handler_cb > 0) gpio_set_level(GPIO_LED, 1);
-            else gpio_set_level(GPIO_LED, 0);
-
-            i++;
-            if (i >= TEST_SIN_WAVE_SIZE) i = 0;
-
-            start_time = esp_timer_get_time();
-        }
-        // Feed the watchdog
-        TIMERG0.wdt_wprotect=TIMG_WDT_WKEY_VALUE;
-        TIMERG0.wdt_feed=1;
-        TIMERG0.wdt_wprotect=0;
-
-    }
+    i2s_set_adc_mode(ADC_UNIT_1, ADC_VOLTAGE_CHANNEL);
 
 }
-void app_main(void)
-{
+
+void adc_sampling(void *parameters){
+
+    // # Define ADC Characteristics for convertion
+    esp_adc_cal_characteristics_t cal;
+    esp_adc_cal_characterize(ADC_UNIT_1, ADC_ATTEN_11db, ADC_WIDTH_12Bit, 3300, &cal);
+
+    
+    // # Declare ADC variables
+    uint16_t buf[ADC_BUFFER_SIZE];  // Raw buffer with measures from ADC;  
+    size_t measures_read;           // Receive number of measures read from I2S - ADC
+    
+    // # Declare local variables
+    uint16_t sample = 0;            // Generic variable to momently store sample value converted to mV
+    uint16_t loop_ctrl = 0;         // Used to control while loop
+    int handler_cb; 
+    
+    // # Start ADC I2S Setup
+    adc_i2s_init();
+
+
+    while (loop_ctrl == 0) {
+        // # Read data from i2s.      
+        esp_err_t err = i2s_read(ADC_I2S_NUM, buf, sizeof(buf), &measures_read, portMAX_DELAY);
+
+        if (err != ESP_OK)
+        {
+            printf("i2s_read: %d\n", err);
+
+        }
+        // # Compute vector size
+        measures_read /= sizeof(uint16_t);  
+
+        // # Loop on measures to convert and save on buffer
+        for (uint16_t i = 0; i < measures_read; i ++)
+        {
+            // Get channel offset on buffer
+            switch (buf[i] >> 12){
+                case ADC_VOLTAGE_CHANNEL:
+                    // Read sample (get 12 first bits)
+                    sample = ADC_GET_MEASURE(buf[i]);
+
+                    // Insert on circular buffer
+                    handler_cb = cb_push(&cb, &sample);
+
+                    // Indicate on LED (buffer status)
+                    if(handler_cb > 0) gpio_set_level(GPIO_LED, 1);
+                    else gpio_set_level(GPIO_LED, 0);
+              
+                    break; 
+            } 
+        }
+    }
+
+    i2s_adc_disable(ADC_I2S_NUM);
+    i2s_stop(ADC_I2S_NUM);
+
+    vTaskDelete(NULL);
+    
+}
+
+
+void app_main(void){
     BaseType_t task_create_ret;				// Return of task create
     int handler_cb;
 
@@ -135,25 +207,9 @@ void app_main(void)
     gpio_set_direction(GPIO_LED, GPIO_MODE_DEF_OUTPUT);
 
     // Setup circular buffer
-    handler_cb = cb_init(&cb, 25500, sizeof(uint16_t));
+    handler_cb = cb_init(&cb, CIRCULAR_BUFFER_SIZE, sizeof(uint16_t));
 
 	if(handler_cb == CB_SUCCESS){
-        //printf("* Buffer initialized.\n");
-
-        // Create task to generate a signal
-        task_create_ret = xTaskCreatePinnedToCore(
-            feed_buffer,			// Function executed in the task
-            "FB",					// Task name (for debug)
-            2046,					// Stack size in bytes
-            NULL,					// Parameter to pass to the function
-            1,						// Task priority
-            &handler_feed_buffer,	// Used to pass back a handle by which the created task can be referenced
-            1                       // CPU core ID
-        );						
-
-        // Check task creation error
-        if (task_create_ret != pdPASS) ESP_LOGE("MAIN", "Error creating feed_buffer task");
-
         // Create task to send data over UART
         task_create_ret = xTaskCreatePinnedToCore(
             uart_send_data,			// Function executed in the task
@@ -168,5 +224,17 @@ void app_main(void)
         // Check task creation error
         if (task_create_ret != pdPASS) ESP_LOGE("MAIN", "Error creating uart_send_data task");
 
+        // Create main task to sample and process signals
+            task_create_ret = xTaskCreatePinnedToCore(
+                adc_sampling,					    // Function executed in the task
+                "SRT",					            // Task name (for debug)
+                32000,								// Stack size in bytes
+                NULL,								// Parameter to pass to the function
+                1,									// Task priority
+                &handler_sample_task,			    // Used to pass back a handle by which the created task can be referenced
+                0);									// CPU core ID
+
+            // Check task creation error
+            if (task_create_ret != pdPASS){ ESP_LOGE(TAG, "Error creating adc_sampling task"); }
     }
 }

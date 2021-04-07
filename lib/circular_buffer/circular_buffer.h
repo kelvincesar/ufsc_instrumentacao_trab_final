@@ -89,5 +89,20 @@ int cb_is_empty(circular_buffer *cb);
  */ 
 int _cb_length(circular_buffer *cb);
 
+/*  
+ * @brief Used to get multiple values from buffer.
+ * @param cb Circular Buffer data structure pointer.
+ * @param vector Variable pointer where data will be returned
+ * @param request_size Variable pointer with total of items that will be returned.
+ * If buffer size is less than requested size, this varible will be rewrited with
+ * total values read from the buffer
+ * 
+ * @return
+ *      - CB_SUCCESS When success;
+ *      - CB_EMPTY_ERROR When buffer is empty.
+ */ 
+int cb_get_values (circular_buffer *cb, void *vector, uint16_t *request_size);
+
+
 // End of the inclusion guard
 #endif

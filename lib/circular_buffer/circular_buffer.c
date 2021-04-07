@@ -59,6 +59,33 @@ int cb_pop(circular_buffer *cb, void *item) {
 	return CB_SUCCESS;
 }
 
+// Realiza a leitura de multiplos valores do buffer circular
+int cb_get_values (circular_buffer *cb, void *vector, uint16_t *request_size) {
+	uint16_t _size = *request_size;
+	// Checks if buffer is empty
+	if (cb_is_empty(cb))
+		return CB_EMPTY_ERROR;
+
+	// Validate size
+	uint16_t available_itens = ((cb->buffer_end - cb->tail) / cb->data_size) - 1;
+	
+
+	if (available_itens < _size) _size = available_itens;
+
+	// Get data from the buffer (oldest one)
+	memcpy(vector, cb->tail, cb->data_size * _size);
+
+	// Change tail pointer value
+	cb->tail = (char*)cb->tail + cb->data_size* _size;
+	if(cb->tail == cb->buffer_end)
+		cb->tail = cb->buffer;
+
+	// Rewrite request size
+	*request_size = _size;
+
+	return CB_SUCCESS;
+}
+
 /* Get buffer size */
 int _cb_length(circular_buffer *cb) {
   return (char *)cb->buffer_end - (char *)cb->buffer;
