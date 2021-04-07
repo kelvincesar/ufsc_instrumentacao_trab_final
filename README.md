@@ -1,4 +1,4 @@
-# trabalho_final_instrumentacao
+# Trabalho final - Amostragem de dados com interface ao LabVIEW
 
     UNIVERSIDADE FEDERAL DE SANTA CATARINA - JOINVILLE
     ESE410009-41010086ME (20203) - Instrumentação para Sistemas Eletrônicos
@@ -16,3 +16,9 @@ ZMPT101B via I2S e armazenado em um buffer circular. Outra task é criada
 
 - Core 0: amostragem do sinal via I2S.
 - Core 1: transmissão dos dados via UART para o software LabVIEW.
+
+
+**Equipamentos:**
+- ESP32;
+- Sensor de tensão AC ZMPT101B;
+- Software LabVIEW.
